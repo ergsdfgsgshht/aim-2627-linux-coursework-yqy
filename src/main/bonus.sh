@@ -7,6 +7,22 @@ output=${2:?需要输出目录}
 
 action=${3:-start}
 
-# TODO：删除下方提示和 exit 77，再填写你的命令。
-printf '%s\n' 'BONUS 尚未实现' >&2
-exit 77
+. "$input/bonus.env"
+log=$output/bonus.log
+
+if [ "$action" = "start" ]; then
+    printf -v cmd 'python3 %q --token %q --log %q' "$WORKER_TOOL" "$TOKEN" "$log"
+    tmux -L "$TMUX_SOCKET" new-session -d -s "$SESSION" "$cmd"
+else
+    if [ -f "$log" ]; then
+        pid=$(sed -n "s/^START $TOKEN pid=//p" "$log" | tail -n 1)
+        if [ -n "$pid" ]; then
+            kill "$pid" 2>/dev/null || true
+            for ((i = 0; i < 40; i++)); do
+                if grep -q "^STOP $TOKEN\$" "$log"; then break; fi
+                sleep 0.1
+            done
+        fi
+    fi
+    tmux -L "$TMUX_SOCKET" kill-session -t "$SESSION" 2>/dev/null || true
+fi

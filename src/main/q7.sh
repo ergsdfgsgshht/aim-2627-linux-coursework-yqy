@@ -5,6 +5,27 @@ set -eu
 input=${1:?需要输入目录}
 output=${2:?需要输出目录}
 
-# TODO：删除下方提示和 exit 77，再填写你的命令。
-printf '%s\n' 'Q7 尚未实现' >&2
-exit 77
+. "$input/remote.env"
+cfg=$output/ssh_config
+{
+    printf 'Host aim-sentry\n'
+    printf '    HostName %s\n' "$HOST"
+    printf '    Port %s\n' "$PORT"
+    printf '    User %s\n' "$REMOTE_USER"
+    printf '    IdentityFile "%s"\n' "$KEY_PATH"
+    printf '    IdentitiesOnly yes\n'
+    printf '    UserKnownHostsFile "%s"\n' "$KNOWN_HOSTS"
+    printf '    StrictHostKeyChecking yes\n'
+} > "$cfg"
+chmod 600 "$cfg"
+
+ssh -F "$cfg" -o BatchMode=yes aim-sentry whoami > "$output/remote-user.txt"
+
+# 远程私有日志路径含空格，先复制到远端主目录的中转名，再用 scp 取回。
+mkdir -p "$output/received"
+relay="aim-relay-$$.log"
+printf -v fetch 'cat %q > %q' "$REMOTE_LOG" "$relay"
+ssh -F "$cfg" -o BatchMode=yes aim-sentry "$fetch"
+scp -F "$cfg" -o BatchMode=yes "aim-sentry:$relay" "$output/received/errors.log"
+printf -v clean 'rm -f %q' "$relay"
+ssh -F "$cfg" -o BatchMode=yes aim-sentry "$clean"
